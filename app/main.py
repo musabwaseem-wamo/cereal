@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import math
 from io import BytesIO
 from pathlib import Path
 import re
@@ -26,12 +29,16 @@ from .modules.llm_service import (
     generate_campaign_ideas,
     generate_timed_video_script,
     generate_video_edit_plan,
+    generate_video_edit_plan_from_video,
 )
 
 
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "data" / "mock_ads.csv"
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024
+MAX_EDIT_VIDEO_DURATION_SECONDS = 180
+MAX_EDIT_FRAME_BYTES = 500 * 1024
 
 
 def build_campaign_output(brief: dict[str, str]) -> dict[str, Any]:
@@ -107,6 +114,59 @@ def parse_runtime_instructions(payload: object, field: str = "instructions") -> 
     if len(payload) > 1000:
         raise ValueError(f"'{field}' must be 1000 characters or fewer.")
     return payload.strip()
+
+
+def parse_edit_video_duration(payload: object) -> float:
+    if not isinstance(payload, (int, float)) or isinstance(payload, bool):
+        raise ValueError("Choose a video at least 0.5 seconds and no longer than 3 minutes.")
+    try:
+        duration_seconds = float(payload)
+    except OverflowError as error:
+        raise ValueError("Choose a video at least 0.5 seconds and no longer than 3 minutes.") from error
+    if (
+        not math.isfinite(duration_seconds)
+        or not 0.5 <= duration_seconds <= MAX_EDIT_VIDEO_DURATION_SECONDS
+    ):
+        raise ValueError("Choose a video at least 0.5 seconds and no longer than 3 minutes.")
+    return round(duration_seconds, 3)
+
+
+def parse_edit_video_frames(payload: object, duration_seconds: float) -> list[dict[str, object]]:
+    if not isinstance(payload, list) or len(payload) != 3:
+        raise ValueError("Extract exactly three frames from the uploaded video.")
+
+    frames: list[dict[str, object]] = []
+    previous_timestamp = -1.0
+    for frame in payload:
+        if not isinstance(frame, dict):
+            raise ValueError("Each extracted video frame must include its timestamp and image.")
+        timestamp = frame.get("timestamp_seconds")
+        image_data = frame.get("image")
+        try:
+            numeric_timestamp = float(timestamp)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError("Video frame timestamps must be ordered and within the uploaded video.") from error
+        if (
+            not isinstance(timestamp, (int, float))
+            or isinstance(timestamp, bool)
+            or not math.isfinite(numeric_timestamp)
+            or not previous_timestamp < numeric_timestamp < duration_seconds
+        ):
+            raise ValueError("Video frame timestamps must be ordered and within the uploaded video.")
+        if not isinstance(image_data, str) or not image_data.startswith("data:image/jpeg;base64,"):
+            raise ValueError("Send the three extracted frames as JPEG images.")
+        encoded_image = image_data.removeprefix("data:image/jpeg;base64,")
+        if len(encoded_image) > 4 * math.ceil(MAX_EDIT_FRAME_BYTES / 3):
+            raise ValueError("Each extracted frame must be 500 KB or smaller.")
+        try:
+            image_bytes = base64.b64decode(encoded_image, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ValueError("An extracted video frame is not valid base64 image data.") from error
+        if len(image_bytes) > MAX_EDIT_FRAME_BYTES or not image_bytes.startswith(b"\xff\xd8\xff"):
+            raise ValueError("Each extracted frame must be a JPEG image no larger than 500 KB.")
+        frames.append({"timestamp_seconds": round(numeric_timestamp, 3), "image": image_data})
+        previous_timestamp = numeric_timestamp
+    return frames
 
 
 def parse_script_scenes(payload: object) -> list[dict[str, Any]]:
@@ -257,6 +317,46 @@ def build_edit_timeline():
         return jsonify({"error": str(error)}), 400
     except (OpenAIError, RuntimeError) as error:
         return generation_error(error)
+
+
+@app.post("/api/analyze-edit-video")
+def analyze_edit_video():
+    payload = request.get_json(silent=True)
+    try:
+        if not isinstance(payload, dict):
+            raise ValueError("Send the uploaded video's duration, three extracted frames, and editing notes.")
+        duration_seconds = parse_edit_video_duration(payload.get("duration_seconds"))
+        frames = parse_edit_video_frames(payload.get("frames"), duration_seconds)
+        interval = payload.get("split_interval_seconds", 5)
+        if not isinstance(interval, int) or isinstance(interval, bool) or interval not in {3, 4, 5, 6, 8, 10}:
+            raise ValueError("Choose a clip split interval of 3, 4, 5, 6, 8, or 10 seconds.")
+        instructions = parse_runtime_instructions(payload.get("instructions"), "editor instructions")
+        script_payload = payload.get("script")
+        scenes = parse_script_scenes(script_payload) if script_payload is not None else []
+        result = generate_video_edit_plan_from_video(
+            duration_seconds,
+            frames,
+            interval,
+            instructions,
+            scenes,
+        )
+        return jsonify({
+            "clips": result["clips"],
+            "clip_count": len(result["clips"]),
+            "duration_seconds": duration_seconds,
+            "analysis_summary": result["analysis_summary"],
+            "edit_suggestions": result["edit_suggestions"],
+            "source": result["source"],
+        })
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except (OpenAIError, RuntimeError) as error:
+        return generation_error(error)
+
+
+@app.errorhandler(413)
+def request_entity_too_large(_error):
+    return jsonify({"error": "The sampled frames are too large. Try a lower-resolution video."}), 413
 
 
 @app.post("/api/media-plan")

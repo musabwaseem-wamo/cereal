@@ -439,6 +439,7 @@ h1, h2, h3, h4, .welcome-card h2, .landing-hero-copy h2,
 }
 @media(max-width:760px) {
   .workflow-navigation { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .edit-suggestions-list { grid-template-columns: 1fr; }
   .workflow-progress { grid-column: 1 / -1; grid-row: 1; text-align: center; }
   .workflow-navigation .button { justify-content: center; min-height: 42px; padding: 9px 10px; font-size: 11px; }
 }
@@ -658,9 +659,30 @@ body { background: var(--paper); color: var(--ink); }
 .chart-legend { display: grid; gap: 6px; }
 .chart-legend-item { display: flex; gap: 7px; align-items: center; color: #64758a; font-size: 9px; }
 .chart-legend-swatch { width: 8px; height: 8px; flex: none; border-radius: 2px; }
+.edit-source-grid { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.2fr); gap: 14px; align-items: start; margin: 14px 0; }
+.edit-source-card { display: grid; gap: 11px; padding: 16px; border: 1px solid #dce5ef; border-radius: 10px; background: #f8fafc; }
+.edit-source-card>label { display: grid; gap: 8px; color: #45566b; font-size: 13px; font-weight: 700; }
+.edit-source-card input[type="file"] { width: 100%; padding: 9px; border: 1px solid #dce5ef; border-radius: 7px; background: #fff; color: #53677d; font-size: 12px; }
+.edit-source-card .subtle-label { margin: 0; line-height: 1.6; }
+.edit-analysis-summary { margin: 12px 0; padding: 14px 16px; border: 1px solid #dce5ef; border-left: 3px solid #3567c8; border-radius: 8px; background: #f8fafc; color: #45566b; font-size: 13px; line-height: 1.65; }
+.campaign-generation-status { min-height: 18px; margin: 9px 0 0; color: #53677d; font-size: 11px; line-height: 1.5; }
+.edit-suggestions-panel { margin: 14px 0; padding: 16px; border: 1px solid #dce5ef; border-radius: 10px; background: #f8fafc; }
+.edit-suggestions-panel h4 { margin: 0 0 11px; color: #172b43; font: 700 14px Manrope, sans-serif; }
+.edit-suggestions-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.edit-suggestion { padding: 12px; border: 1px solid #e1e8f0; border-radius: 8px; background: #fff; }
+.edit-suggestion strong { color: #3567c8; font: 700 10px "DM Mono", monospace; text-transform: uppercase; }
+.edit-suggestion p { margin: 7px 0 0; color: #53677d; font-size: 11px; line-height: 1.55; }
+.edit-video-stage { position: relative; max-width: 600px; overflow: hidden; border: 1px solid #233042; border-radius: 10px; background: #0c1118; }
+.edit-video-stage video { display: block; width: 100%; max-height: 440px; background: #0c1118; object-fit: contain; }
+.edit-video-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 16px; pointer-events: none; }
+.edit-preview-brand,.edit-preview-caption { visibility: hidden; opacity: 0; transition: opacity .16s ease; }
+.edit-preview-brand.is-visible { visibility: visible; align-self: flex-start; padding: 6px 9px; border: 1px solid rgba(255,255,255,.32); border-radius: 5px; background: rgba(15,26,39,.72); color: #fff; font: 800 10px Manrope,sans-serif; letter-spacing: .8px; opacity: 1; }
+.edit-preview-caption.is-visible { visibility: visible; max-width: 90%; margin-top: auto; padding: 8px 12px; border-radius: 5px; background: rgba(15,26,39,.8); color: #fff; font-size: 14px; font-weight: 700; line-height: 1.4; text-align: center; opacity: 1; }
 .edit-timeline { display: grid; gap: 9px; margin: 14px 0; }
 .edit-clip { padding: 14px; border: 1px solid #dce5ef; border-left: 3px solid #3567c8; border-radius: 9px; background: #fff; }
 .edit-clip-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.edit-clip-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.edit-clip-actions .button { padding: 7px 9px; }
 .edit-clip-heading strong { color: #3567c8; font: 700 9px "DM Mono", monospace; }
 .edit-clip p { margin: 8px 0 0; color: #53677d; font-size: 10px; line-height: 1.55; }
 .edit-clip .edit-clip-beat { margin-top: 12px; color: #172b43; font: 700 12px Manrope, sans-serif; }
@@ -670,6 +692,8 @@ body { background: var(--paper); color: var(--ink); }
 .landing-ad-copy p { margin: 0; color: #566a82; font-size: 10px; line-height: 1.6; }
 @media(max-width:760px) {
   .analytics-charts { grid-template-columns: 1fr; }
+  .edit-source-grid { grid-template-columns: 1fr; }
+  .edit-video-stage { width: 100%; }
   .output-card { flex-wrap: wrap; }
   .output-action { margin-left: 34px; }
   .video-controls { gap: 8px; }

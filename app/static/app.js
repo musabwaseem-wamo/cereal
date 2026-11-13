@@ -1,11 +1,28 @@
 const form = document.querySelector("#brief-form");
 const toast = document.querySelector("#toast");
+const editVideoUpload = document.querySelector("#edit-video-upload");
+const editVideoPreview = document.querySelector("#edit-video-preview");
+const editVideoStage = document.querySelector("#edit-video-stage");
+const editVideoSourceStatus = document.querySelector("#edit-video-source-status");
+const previewEditButton = document.querySelector("#preview-edit-timeline");
+const buildEditButton = document.querySelector("#build-edit-timeline");
+const editAnalysisSummary = document.querySelector("#edit-visual-analysis-summary");
+const editSuggestionsPanel = document.querySelector("#edit-suggestions-panel");
+const editSuggestionsList = document.querySelector("#edit-suggestions-list");
+const MAX_EDIT_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_EDIT_VIDEO_DURATION_SECONDS = 180;
 let toastTimer;
 let currentBrief = null;
 let selectedIdea = null;
 let selectedLandingCopy = null;
 let currentVideoScript = null;
 let editingClips = [];
+let editVideoObjectUrl = null;
+let editVideoDuration = null;
+let editVideoLoadError = false;
+let editVideoErrorMessage = "";
+let activePreviewClipIndex = -1;
+let previewEditSequence = false;
 let staticCreativeDirections = [];
 let draftApproved = false;
 let currentDraftId = null;
@@ -517,6 +534,7 @@ function continueToLandingPage() {
 function renderCampaign(data) {
   document.querySelector("#welcome").classList.add("hidden");
   document.querySelector("#generated-content").classList.remove("hidden");
+  clearEditVideo();
   currentDraftId = editingApprovedDraftId || crypto.randomUUID();
   currentCampaignData = data;
   currentBrief = data.brief;
@@ -559,9 +577,16 @@ function renderCampaign(data) {
       document.querySelector("#image-prompt-text").value = "";
       document.querySelector("#ugc-prompt-text").value = "";
       document.querySelector("#video-script-source").textContent = "Choose a total duration and generate a script.";
-      document.querySelector("#edit-timeline-source").textContent = "Generate a timed script first, then build its edit timeline.";
       currentVideoScript = null;
       editingClips = [];
+      document.querySelector("#edit-timeline").replaceChildren();
+      document.querySelector("#edit-timeline-source").textContent =
+        "Your campaign idea changed. Generate a new video edit plan to refresh the campaign context.";
+      editAnalysisSummary.textContent = "";
+      editAnalysisSummary.classList.add("hidden");
+      clearEditSuggestions();
+      stopEditPreview();
+      updateEditPreviewState();
       updateLandingAdCopy(null);
       document.querySelector("#copy-results").classList.add("hidden");
       document.querySelector("#idea-selection-help").textContent = `Concept ${index + 1} selected. Continue when you're ready to generate its ad copy.`;
@@ -639,7 +664,10 @@ function renderCampaign(data) {
   document.querySelector("#video-script-source").textContent = "Choose a total duration and generate a script.";
   document.querySelector("#video-progress").classList.add("hidden");
   document.querySelector("#edit-timeline").replaceChildren();
-  document.querySelector("#edit-timeline-source").textContent = "Generate a timed script first, then build its edit timeline.";
+  document.querySelector("#edit-timeline-source").textContent = "Choose a video to enable frame analysis and edit suggestions.";
+  editAnalysisSummary.textContent = "";
+  editAnalysisSummary.classList.add("hidden");
+  clearEditSuggestions();
   document.querySelector("#media-plan-result").classList.add("hidden");
   document.querySelector("#meta-connect-gate").classList.remove("hidden");
   document.querySelector("#meta-report").classList.add("hidden");
@@ -721,6 +749,7 @@ function startNewCampaign() {
   }
   document.querySelector("#generated-content").classList.add("hidden");
   document.querySelector("#welcome").classList.remove("hidden");
+  clearEditVideo();
   document.querySelector("#approval-review-dialog").close();
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === "overview");
@@ -988,8 +1017,10 @@ async function generateCampaign(event) {
   const submitButton = form.querySelector('button[type="submit"]');
   const activeButton = event?.currentTarget?.tagName === "BUTTON" ? event.currentTarget : submitButton;
   const originalText = activeButton.innerHTML;
+  const generationStatus = document.querySelector("#campaign-generation-status");
   activeButton.disabled = true;
   activeButton.textContent = "Generating campaign ideas…";
+  generationStatus.textContent = "Generating five strategic concepts. This may take a little while.";
 
   try {
     const brief = Object.fromEntries(new FormData(form).entries());
@@ -998,16 +1029,42 @@ async function generateCampaign(event) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(brief),
     });
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
+    if (!data || typeof data !== "object") {
+      throw new Error("The server returned an unreadable response. Restart the app and try again.");
+    }
     if (!response.ok) throw new Error(data.error || "Campaign generation failed.");
     renderCampaign(data);
+    generationStatus.textContent = `Five ideas are ready · ${data.ideas_source}.`;
     showToast("Ideas are ready. Select one to generate its ad copy.");
   } catch (error) {
+    generationStatus.textContent = `Could not generate campaign ideas: ${error.message || "try again."}`;
     showToast(error.message || "Could not generate the campaign.", true);
   } finally {
     activeButton.disabled = false;
     activeButton.innerHTML = originalText;
   }
+}
+
+function clearEditSuggestions() {
+  editSuggestionsList.replaceChildren();
+  editSuggestionsPanel.classList.add("hidden");
+}
+
+function renderEditSuggestions(suggestions) {
+  clearEditSuggestions();
+  if (!Array.isArray(suggestions) || suggestions.length === 0) return;
+  suggestions.forEach(({ focus, suggestion }) => {
+    const card = document.createElement("article");
+    card.className = "edit-suggestion";
+    const label = document.createElement("strong");
+    label.textContent = focus;
+    const detail = document.createElement("p");
+    detail.textContent = suggestion;
+    card.append(label, detail);
+    editSuggestionsList.append(card);
+  });
+  editSuggestionsPanel.classList.remove("hidden");
 }
 
 async function generateSelectedIdeaCopy() {
@@ -1100,7 +1157,14 @@ async function generateVideoScript() {
   setCampaignStepComplete("editing", false);
   currentVideoScript = null;
   editingClips = [];
+  stopEditPreview();
   document.querySelector("#edit-timeline").replaceChildren();
+  document.querySelector("#edit-timeline-source").textContent =
+    "Script updated. Generate a new plan to use the current script context.";
+  editAnalysisSummary.textContent = "";
+  editAnalysisSummary.classList.add("hidden");
+  clearEditSuggestions();
+  updateEditPreviewState();
   button.disabled = true;
   button.textContent = isRegenerating ? "Regenerating video script…" : "Generating video script…";
   progress.classList.remove("hidden");
@@ -1138,6 +1202,7 @@ async function generateVideoScript() {
 }
 
 function renderEditTimeline(clips) {
+  stopEditPreview();
   editingClips = clips;
   const container = document.querySelector("#edit-timeline");
   container.replaceChildren();
@@ -1154,7 +1219,16 @@ function renderEditTimeline(clips) {
     split.textContent = "Split at midpoint";
     split.disabled = clip.end_seconds - clip.start_seconds < 2;
     split.addEventListener("click", () => splitEditClip(index));
-    heading.append(time, split);
+    const actions = document.createElement("div");
+    actions.className = "edit-clip-actions";
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "button button-outline edit-preview-clip";
+    preview.textContent = "Preview cut";
+    preview.disabled = !canPreviewEditClip(clip);
+    preview.addEventListener("click", () => playEditPreview(index, false));
+    actions.append(preview, split);
+    heading.append(time, actions);
     const beat = document.createElement("p");
     beat.className = "edit-clip-beat";
     beat.textContent = clip.beat;
@@ -1183,6 +1257,7 @@ function renderEditTimeline(clips) {
     }
     container.append(card);
   });
+  updateEditPreviewState();
 }
 
 function splitEditClip(index) {
@@ -1191,6 +1266,7 @@ function splitEditClip(index) {
     showToast("This clip is too short to split further.", true);
     return;
   }
+  stopEditPreview();
   const midpoint = clip.start_seconds + Math.floor((clip.end_seconds - clip.start_seconds) / 2);
   const first = { ...clip, end_seconds: midpoint, cut_note: "Cut on action or a natural visual change." };
   const second = {
@@ -1206,20 +1282,250 @@ function splitEditClip(index) {
     `Edited locally · ${editingClips.length} clips · ${currentVideoScript[currentVideoScript.length - 1].end_seconds}-second total.`;
 }
 
-async function buildEditTimeline() {
-  if (!currentVideoScript) {
-    showToast("Generate a timed script before building the editing timeline.", true);
+function formatEditDuration(seconds) {
+  const wholeSeconds = Math.round(seconds);
+  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
+}
+
+function stopEditPreview() {
+  previewEditSequence = false;
+  activePreviewClipIndex = -1;
+  editVideoPreview.pause();
+  document.querySelector("#edit-preview-caption").textContent = "";
+  document.querySelector("#edit-preview-brand").classList.remove("is-visible");
+  document.querySelector("#edit-preview-caption").classList.remove("is-visible");
+}
+
+function canPreviewEditClip(clip) {
+  return Boolean(editVideoObjectUrl && editVideoDuration !== null && editVideoDuration + 0.25 >= clip.end_seconds);
+}
+
+function updateEditPreviewState() {
+  const editDuration = editingClips.at(-1)?.end_seconds;
+  const fullEditFits = Boolean(
+    editingClips.length &&
+    editVideoDuration !== null &&
+    editDuration &&
+    editVideoDuration + 0.25 >= editDuration
+  );
+  buildEditButton.disabled = !editVideoObjectUrl || editVideoDuration === null || editVideoLoadError;
+  previewEditButton.disabled = !fullEditFits;
+  document.querySelectorAll(".edit-preview-clip").forEach((button, index) => {
+    button.disabled = !canPreviewEditClip(editingClips[index]);
+  });
+
+  if (editVideoLoadError) {
+    editVideoSourceStatus.textContent = editVideoErrorMessage;
+  } else if (!editVideoObjectUrl) {
+    editVideoSourceStatus.textContent =
+      "Choose a video up to 100 MB and 3 minutes. Its duration and three sampled still frames are sent to the configured AI when you generate a plan; the full video stays in this browser.";
+  } else if (editVideoDuration === null) {
+    editVideoSourceStatus.textContent = "Video selected · reading its duration…";
+  } else {
+    editVideoSourceStatus.textContent =
+      `Source ready · ${editVideoDuration.toFixed(1)} seconds. The full video stays local; three sampled frames are sent for AI analysis when you generate a plan.`;
+  }
+}
+
+function clearEditVideo() {
+  stopEditPreview();
+  if (editVideoObjectUrl) URL.revokeObjectURL(editVideoObjectUrl);
+  editVideoObjectUrl = null;
+  editVideoDuration = null;
+  editVideoLoadError = false;
+  editVideoErrorMessage = "";
+  editVideoUpload.value = "";
+  editVideoPreview.removeAttribute("src");
+  editVideoPreview.load();
+  editVideoStage.classList.add("hidden");
+  editingClips = [];
+  document.querySelector("#edit-timeline").replaceChildren();
+  document.querySelector("#edit-timeline-source").textContent = "Choose a video to enable frame analysis and edit suggestions.";
+  editAnalysisSummary.textContent = "";
+  editAnalysisSummary.classList.add("hidden");
+  clearEditSuggestions();
+  updateEditPreviewState();
+}
+
+function showEditPreviewClip(index) {
+  const clip = editingClips[index];
+  if (!clip) return;
+  document.querySelector("#edit-preview-brand").textContent = currentBrief?.brand || "";
+  document.querySelector("#edit-preview-brand").classList.toggle("is-visible", Boolean(currentBrief?.brand));
+  const caption = document.querySelector("#edit-preview-caption");
+  caption.textContent = clip.on_screen_text || "";
+  caption.classList.toggle("is-visible", Boolean(clip.on_screen_text));
+}
+
+async function playEditPreview(index, sequence) {
+  const clip = editingClips[index];
+  if (!editVideoObjectUrl || editVideoDuration === null || !clip) {
+    showToast("Choose a video and generate an edit plan before previewing cuts.", true);
     return;
   }
-  const button = document.querySelector("#build-edit-timeline");
-  setCampaignStepComplete("editing", false);
-  button.disabled = true;
-  button.textContent = "Building timeline…";
+  if (!canPreviewEditClip(clip)) {
+    showToast("This cut extends beyond the uploaded video's duration.", true);
+    return;
+  }
+
+  editVideoPreview.pause();
+  previewEditSequence = sequence;
+  activePreviewClipIndex = index;
+  showEditPreviewClip(index);
+  editVideoPreview.currentTime = clip.start_seconds;
   try {
-    const response = await fetch("/api/build-edit-timeline", {
+    await editVideoPreview.play();
+  } catch (error) {
+    stopEditPreview();
+    showToast(`Could not play this video in the browser: ${error.message}`, true);
+  }
+}
+
+function advanceEditPreview() {
+  if (activePreviewClipIndex < 0) return;
+  const clip = editingClips[activePreviewClipIndex];
+  if (!clip || editVideoPreview.currentTime + 0.05 < clip.end_seconds) return;
+  if (previewEditSequence && activePreviewClipIndex < editingClips.length - 1) {
+    activePreviewClipIndex += 1;
+    const nextClip = editingClips[activePreviewClipIndex];
+    showEditPreviewClip(activePreviewClipIndex);
+    editVideoPreview.currentTime = nextClip.start_seconds;
+    editVideoPreview.play().catch((error) => {
+      stopEditPreview();
+      showToast(`Could not continue the edit preview: ${error.message}`, true);
+    });
+    return;
+  }
+  stopEditPreview();
+}
+
+function handleEditVideoUpload() {
+  const file = editVideoUpload.files?.[0];
+  if (!file) return;
+  stopEditPreview();
+  if (editVideoObjectUrl) URL.revokeObjectURL(editVideoObjectUrl);
+  editVideoObjectUrl = null;
+  editVideoDuration = null;
+  editVideoLoadError = false;
+  editVideoErrorMessage = "";
+  editVideoPreview.removeAttribute("src");
+  editVideoPreview.load();
+  editVideoStage.classList.add("hidden");
+  editingClips = [];
+  document.querySelector("#edit-timeline").replaceChildren();
+  document.querySelector("#edit-timeline-source").textContent = "Choose a video to enable frame analysis and edit suggestions.";
+  editAnalysisSummary.textContent = "";
+  editAnalysisSummary.classList.add("hidden");
+  clearEditSuggestions();
+  setCampaignStepComplete("editing", false);
+  if (file.type && !file.type.startsWith("video/")) {
+    editVideoUpload.value = "";
+    editVideoLoadError = true;
+    editVideoErrorMessage = "Choose a supported video file to generate an edit plan.";
+    updateEditPreviewState();
+    showToast("Choose a video file to preview.", true);
+    return;
+  }
+  if (file.size > MAX_EDIT_VIDEO_BYTES) {
+    editVideoUpload.value = "";
+    editVideoLoadError = true;
+    editVideoErrorMessage = "The selected video is larger than the 100 MB limit.";
+    updateEditPreviewState();
+    showToast(editVideoErrorMessage, true);
+    return;
+  }
+  editVideoObjectUrl = URL.createObjectURL(file);
+  editVideoStage.classList.remove("hidden");
+  editVideoPreview.src = editVideoObjectUrl;
+  editVideoPreview.load();
+  editVideoSourceStatus.textContent = `${file.name} selected · reading its duration…`;
+  updateEditPreviewState();
+}
+
+function seekEditVideoTo(seconds) {
+  return new Promise((resolve, reject) => {
+    const video = editVideoPreview;
+    const timeout = setTimeout(() => {
+      video.removeEventListener("seeked", onSeeked);
+      reject(new Error("Timed out while extracting a frame from the video."));
+    }, 5000);
+    const onSeeked = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    video.addEventListener("seeked", onSeeked, { once: true });
+    try {
+      video.currentTime = seconds;
+      if (Math.abs(video.currentTime - seconds) < 0.001 && !video.seeking) {
+        video.removeEventListener("seeked", onSeeked);
+        clearTimeout(timeout);
+        resolve();
+      }
+    } catch (error) {
+      video.removeEventListener("seeked", onSeeked);
+      clearTimeout(timeout);
+      reject(new Error(`Could not seek to a video frame: ${error.message}`));
+    }
+  });
+}
+
+async function extractThreeEditFrames() {
+  if (!editVideoObjectUrl || editVideoDuration === null || editVideoLoadError) {
+    throw new Error("Choose a valid video before generating the edit plan.");
+  }
+  const video = editVideoPreview;
+  const previousTime = video.currentTime;
+  const scale = Math.min(1, 512 / Math.max(video.videoWidth, video.videoHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("This browser cannot extract video frames.");
+
+  const timestamps = [editVideoDuration * 0.1, editVideoDuration * 0.5, editVideoDuration * 0.9];
+  const frames = [];
+  video.pause();
+  try {
+    for (const timestamp of timestamps) {
+      await seekEditVideoTo(timestamp);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const image = canvas.toDataURL("image/jpeg", 0.72);
+      if (image.length > 700000) {
+        throw new Error("A sampled frame is too large to send. Choose a lower-resolution video.");
+      }
+      frames.push({ timestamp_seconds: Number(timestamp.toFixed(3)), image });
+    }
+  } finally {
+    await seekEditVideoTo(Math.min(previousTime, Math.max(0, editVideoDuration - 0.01)));
+  }
+  return frames;
+}
+
+async function buildEditTimeline() {
+  if (!editVideoObjectUrl || editVideoDuration === null || editVideoLoadError) {
+    editVideoUpload.focus();
+    showToast("Choose and load a video before generating its edit plan.", true);
+    return;
+  }
+  setCampaignStepComplete("editing", false);
+  editingClips = [];
+  document.querySelector("#edit-timeline").replaceChildren();
+  document.querySelector("#edit-timeline-source").textContent = "Analyzing the video duration and sampled frames…";
+  buildEditButton.disabled = true;
+  buildEditButton.textContent = "Analyzing video…";
+  editAnalysisSummary.textContent = "";
+  editAnalysisSummary.classList.add("hidden");
+  clearEditSuggestions();
+  updateEditPreviewState();
+  try {
+    editVideoSourceStatus.textContent = "Extracting three video frames locally…";
+    const frames = await extractThreeEditFrames();
+    const response = await fetch("/api/analyze-edit-video", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        duration_seconds: editVideoDuration,
+        frames,
         script: currentVideoScript,
         split_interval_seconds: Number(document.querySelector("#edit-split-interval").value),
         instructions: document.querySelector("#editing-instructions").value.trim(),
@@ -1227,16 +1533,19 @@ async function buildEditTimeline() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not build the editing timeline.");
+    renderEditSuggestions(data.edit_suggestions);
     renderEditTimeline(data.clips);
     setCampaignStepComplete("editing", data.clips.length > 0);
     document.querySelector("#edit-timeline-source").textContent =
-      `${data.source} · ${data.clip_count} clips · ${data.duration_seconds}-second continuous timeline.`;
+      `${data.source} · 3 sampled frames · ${Number(data.duration_seconds).toFixed(1)} seconds · ${data.clip_count} clips.`;
+    editAnalysisSummary.textContent = data.analysis_summary;
+    editAnalysisSummary.classList.remove("hidden");
     showToast("Edit timeline is ready. Split any clip again at its midpoint.");
   } catch (error) {
     showToast(error.message || "Could not build the editing timeline.", true);
   } finally {
-    button.disabled = false;
-    button.innerHTML = 'Build / rebuild timeline <span class="button-arrow">↗</span>';
+    buildEditButton.innerHTML = 'Generate edit plan <span class="button-arrow">↗</span>';
+    updateEditPreviewState();
   }
 }
 
@@ -1301,6 +1610,35 @@ document.querySelector("#copy-image-prompt-button").addEventListener("click", co
 document.querySelector("#generate-ugc-prompt-button").addEventListener("click", generateUgcPrompt);
 document.querySelector("#copy-ugc-prompt-button").addEventListener("click", copyUgcPrompt);
 document.querySelector("#build-edit-timeline").addEventListener("click", buildEditTimeline);
+previewEditButton.addEventListener("click", () => playEditPreview(0, true));
+editVideoUpload.addEventListener("change", handleEditVideoUpload);
+editVideoPreview.addEventListener("loadedmetadata", () => {
+  const duration = editVideoPreview.duration;
+  if (!Number.isFinite(duration) || duration < 0.5) {
+    editVideoLoadError = true;
+    editVideoErrorMessage = "Choose a video at least 0.5 seconds long.";
+    editVideoDuration = null;
+  } else if (duration > MAX_EDIT_VIDEO_DURATION_SECONDS) {
+    editVideoLoadError = true;
+    editVideoErrorMessage = "Videos must be 3 minutes or shorter for edit planning.";
+    editVideoDuration = null;
+  } else {
+    editVideoLoadError = false;
+    editVideoErrorMessage = "";
+    editVideoDuration = duration;
+  }
+  updateEditPreviewState();
+});
+editVideoPreview.addEventListener("error", () => {
+  if (!editVideoObjectUrl) return;
+  editVideoDuration = null;
+  editVideoLoadError = true;
+  editVideoErrorMessage = "This browser could not play the selected video. Try an MP4 or WebM file.";
+  updateEditPreviewState();
+  showToast(editVideoErrorMessage, true);
+});
+editVideoPreview.addEventListener("timeupdate", advanceEditPreview);
+editVideoPreview.addEventListener("ended", advanceEditPreview);
 document.querySelector("#generate-media-plan").addEventListener("click", generateMediaPlan);
 form.addEventListener("input", () => {
   markCurrentDraftModified();

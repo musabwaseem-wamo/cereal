@@ -15,7 +15,7 @@ Implemented:
 - Meta demo action that reveals sample CSV reporting data
 
 Still proposed or illustrative:
-- Finished image/video generation and footage editing/rendering
+- Finished image/video generation and rendered video export with applied cuts, audio, captions, B-roll and branding
 - Live Meta or Toast connections (the in-app Meta action only reveals demo data)
 - Automated actions in ad accounts
 - Published landing pages and persistent approvals (current approval status is not saved)

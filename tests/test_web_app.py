@@ -57,6 +57,13 @@ def test_home_serves_local_campaign_studio():
     assert b"copy-progress" in response.data
     assert b"Total video duration" in response.data
     assert b"Generate / regenerate script" in response.data
+    assert b'id="edit-video-upload"' in response.data
+    assert b'id="edit-video-preview"' in response.data
+    assert b'id="preview-edit-timeline"' in response.data
+    assert b"required aria-required=\"true\"" in response.data
+    assert b"three sampled still frames are sent to the configured AI" in response.data
+    assert b"the full video stays in this browser" in response.data
+    assert b'id="edit-visual-analysis-summary"' in response.data
     for workflow in (
         b"AI Idea Generator",
         b"AI Copywriting",
@@ -93,6 +100,8 @@ def test_home_serves_local_campaign_studio():
     assert b"landing-cta-url" not in response.data
     assert b"journey-strip" not in response.data
     assert b"Campaign details" in response.data
+    assert b"campaign-generation-status" in response.data
+    assert b"edit-suggestions-panel" in response.data
     assert b"START WITH THE ESSENTIALS" not in response.data
     page = response.get_data(as_text=True)
     tab_bar = page.split('<nav class="tabs"', 1)[1].split("</nav>", 1)[0]
@@ -148,6 +157,15 @@ def test_home_serves_local_campaign_studio():
     assert 'document.querySelector("#generated-content").classList.add("hidden")' in script
     assert "Your approved campaign is saved in Approved drafts." in script
     assert "Save changes & approve" in script
+    assert "function playEditPreview(index, sequence)" in script
+    assert "function handleEditVideoUpload()" in script
+    assert "async function extractThreeEditFrames()" in script
+    assert "function renderEditSuggestions(suggestions)" in script
+    assert "campaign-generation-status" in script
+    assert "frames," in script
+    assert "URL.createObjectURL(file)" in script
+    assert "URL.revokeObjectURL(editVideoObjectUrl)" in script
+    assert 'editVideoPreview.addEventListener("timeupdate", advanceEditPreview)' in script
     assert "const requiredCampaignSteps = [" in script
     for step in ("ideas", "copy", "landing", "creative", "script", "ugc", "editing", "media"):
         assert f'["{step}",' in script
@@ -634,6 +652,133 @@ def test_edit_timeline_splits_scenes_and_preserves_continuity(monkeypatch):
     )
     assert data["clips"][1]["voiceover"] == ""
     assert data["clips"][0]["editor_note"] == "Keep the pace natural."
+
+
+def make_video_frames(duration_seconds=5.0):
+    return [
+        {
+            "timestamp_seconds": timestamp,
+            "image": "data:image/jpeg;base64,/9j/2Q==",
+        }
+        for timestamp in (duration_seconds * 0.1, duration_seconds * 0.5, duration_seconds * 0.9)
+    ]
+
+
+def test_video_edit_analysis_requires_three_valid_frames():
+    response = main.app.test_client().post(
+        "/api/analyze-edit-video",
+        json={"duration_seconds": 5, "frames": []},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Extract exactly three frames from the uploaded video."
+
+
+def test_video_edit_analysis_rejects_invalid_duration_and_frame_data():
+    client = main.app.test_client()
+    invalid_duration = client.post(
+        "/api/analyze-edit-video",
+        json={"duration_seconds": 181, "frames": make_video_frames()},
+    )
+    invalid_frame = client.post(
+        "/api/analyze-edit-video",
+        json={
+            "duration_seconds": 5,
+            "frames": [
+                {"timestamp_seconds": timestamp, "image": "data:image/png;base64,AAAA"}
+                for timestamp in (0.5, 2.5, 4.5)
+            ],
+        },
+    )
+
+    assert invalid_duration.status_code == 400
+    assert invalid_frame.status_code == 400
+    assert invalid_frame.get_json()["error"] == "Send the three extracted frames as JPEG images."
+
+
+def test_video_edit_analysis_local_fallback_covers_video_duration(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    response = main.app.test_client().post(
+        "/api/analyze-edit-video",
+        json={
+            "duration_seconds": 5.25,
+            "frames": make_video_frames(5.25),
+            "split_interval_seconds": 3,
+            "instructions": "Keep the cut clean.",
+        },
+    )
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["source"] == "Local demo (no OpenAI key configured)"
+    assert data["duration_seconds"] == 5.25
+    assert data["clip_count"] == 2
+    assert data["clips"][0]["start_seconds"] == 0
+    assert data["clips"][-1]["end_seconds"] == 5.25
+    assert "were not analyzed" in data["analysis_summary"]
+    assert data["edit_suggestions"] == []
+
+
+def test_video_edit_analysis_sends_only_three_frames_to_openai(monkeypatch):
+    duration = 5.125
+    calls = []
+    sample = {
+        "analysis_summary": "A product is visible in the opening and closing samples.",
+        "edit_suggestions": [
+            {"focus": "Opening", "suggestion": "Start on the clearest product frame."},
+            {"focus": "Pacing", "suggestion": "Hold longer on the central product view."},
+            {"focus": "Ending", "suggestion": "End on the visible product and verify the source."},
+        ],
+        "clips": [{
+            "start_seconds": 0,
+            "end_seconds": duration,
+            "beat": "Product close",
+            "visual": "Hold on the product visible in the sampled frames.",
+            "voiceover": "",
+            "on_screen_text": "Explore more",
+            "cut_note": "End on the clear product frame.",
+        }],
+    }
+
+    class FakeOpenAI:
+        def __init__(self, api_key):
+            assert api_key == "test-key"
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    calls.append(kwargs)
+                    message = SimpleNamespace(content=json.dumps(sample))
+                    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(llm_service, "OpenAI", FakeOpenAI)
+    frames = make_video_frames(duration)
+    response = main.app.test_client().post(
+        "/api/analyze-edit-video",
+        json={
+            "duration_seconds": duration,
+            "frames": frames,
+            "split_interval_seconds": 6,
+        },
+    )
+    data = response.get_json()
+
+    assert response.status_code == 200
+    assert data["source"] == "OpenAI visual analysis"
+    assert data["analysis_summary"] == sample["analysis_summary"]
+    assert data["edit_suggestions"] == sample["edit_suggestions"]
+    assert data["clips"][-1]["end_seconds"] == duration
+    content = calls[0]["messages"][1]["content"]
+    image_parts = [part for part in content if part["type"] == "image_url"]
+    assert len(image_parts) == 3
+    assert [part["image_url"]["url"] for part in image_parts] == [
+        frame["image"] for frame in frames
+    ]
+    assert all(part["image_url"]["detail"] == "high" for part in image_parts)
+    assert "5.125 seconds" in content[0]["text"]
+    assert "Never describe something as moving" in content[0]["text"]
 
 
 def test_media_plan_is_brief_based_not_ads_report_and_budget_sums():

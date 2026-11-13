@@ -73,20 +73,23 @@ Current prototype: choose a creator format and aspect ratio to produce a prompt 
 
 ## 5. AI Video Editing
 
-Input: timed script scenes
+Input: required local source video, its runtime, three sampled still frames, optional timed script, and editing notes
 
 Workflow:
-- split longer scenes into short timeline clips
+- sample frames near the beginning, middle, and end of the source
+- return a visual summary and three focused edit suggestions grounded in those samples
+- suggest a continuous clip plan grounded in those visual samples and the source runtime
 - split an individual clip again at its midpoint
-- carry voiceover and on-screen text only on the first clip of a split
-- attach editing notes to the resulting text timeline
+- optionally use a timed script for voiceover and on-screen text
+- attach editing notes to the resulting timeline
+- preview the proposed cut sequence against the local source video with captions and a campaign brand mark
 
 Human review:
-- choose the final cut points against actual footage
+- verify AI observations and choose final cut points against the full footage
 - check pacing and continuity
 - apply captions, transitions, branding and final export in a media editor
 
-Current prototype: a script-to-timeline assistant creates continuous clip boundaries and editable split actions. It does not ingest footage or render a video.
+Current prototype: the browser extracts the video duration and three still frames. When configured, OpenAI analyzes those frames—not the full video or its audio—and returns a visual summary, three focused edit suggestions, and a duration-matched continuous edit plan. Only the sampled stills, timestamps, duration, optional script and edit notes are sent to the AI; the original video remains local. The timeline can be previewed and split in the browser but is not rendered or exported.
 
 ## 6. AI Media Buyer / Ads Agent
 

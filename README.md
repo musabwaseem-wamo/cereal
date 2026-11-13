@@ -12,11 +12,11 @@ Each of the nine challenge workflows has its own section, arranged in a guided s
 4. **AI Static Creative:** build an editable image prompt from the brief, selected idea, visual direction and aspect ratio. Copy it to an external image model; this app does not render images.
 5. **AI Script Writing:** generate a continuous 15-, 30-, 45- or 60-second script, then regenerate with a runtime improvement request. OpenAI mode applies the request; local-template mode attaches it as a clearly labeled production note.
 6. **AI UGC Video:** build a copyable creator-style video prompt and shot outline with claim-safety guidance. It does not generate video.
-7. **AI Video Editing:** split timed script scenes into an edit-ready clip timeline and split individual clips at their midpoint. This is text-only; it does not edit footage or render a video.
+7. **AI Video Editing:** require a source video, read its duration, and sample three frames in the browser. When an OpenAI key is configured, send only those still frames, their timestamps, the duration, optional script context, and editing notes to the model for three visual edit recommendations and a video-aware continuous cut plan. Preview cuts locally and split clips at their midpoint. The original video is never uploaded; rendered/exported edits are not included.
 8. **AI Media Buyer / Ads Agent:** get a rule-based launch plan, daily budget allocation, success metrics and guardrails from the campaign brief. This planning section is separate from results reporting and cannot control ad accounts.
 9. **Toast / Meta Ads Analysis:** view sample CSV metrics, recommendations, a ROAS bar chart and a conversion-share chart.
 
-No live advertising accounts are connected. The Meta demo reveals the bundled CSV; it does not authenticate or retrieve live data. The landing-page export is a single HTML file with embedded CSS; review its placeholder button links, product details and claims before publishing. Approved campaign snapshots are saved in this browser's local storage and can be reopened from **Approved drafts** in the sidebar or top bar. Choose **Edit draft** to reopen one in the studio; regenerate the campaign after changing its brief, then **Save changes & approve** to replace the archived version. After approval, choose **Start new campaign** to return to the brief form; the approved snapshot stays archived. Drafts are not uploaded or published. OpenAI use requires an API key and internet access, and may incur charges.
+No live advertising accounts are connected. The Meta demo reveals the bundled CSV; it does not authenticate or retrieve live data. The landing-page export is a single HTML file with embedded CSS; review its placeholder button links, product details and claims before publishing. Approved campaign snapshots are saved in this browser's local storage and can be reopened from **Approved drafts** in the sidebar or top bar. Choose **Edit draft** to reopen one in the studio; regenerate the campaign after changing its brief, then **Save changes & approve** to replace the archived version. After approval, choose **Start new campaign** to return to the brief form; the approved snapshot stays archived. Drafts are not uploaded or published. OpenAI use requires an API key and internet access, and may incur charges. For video edit analysis, only three sampled still frames and video metadata are sent to OpenAI; do not use footage you are not allowed to share with the configured provider.
 
 ## Project structure
 
@@ -27,6 +27,8 @@ cerealbox-ai-studio/
 ├── uv.lock
 ├── .env.example
 ├── .gitignore
+├── samples/
+│   └── video-editing-sample.mp4
 ├── app/
 │   ├── __init__.py
 │   ├── main.py
@@ -101,6 +103,7 @@ The app is a local, end-to-end workflow prototype:
 2. Select an idea and use the workflow navigation to continue to ad copy. Review the hooks, headlines and body-copy variants; the selected primary text carries into the next page.
 3. Review the landing-page preview and download its standalone HTML draft.
 4. Continue in order through **AI Static Creative**, **AI Script Writing**, **AI UGC Video**, **AI Video Editing**, and **AI Media Buyer**. Each page has previous/next controls; direct tabs remain available too.
+   In **AI Video Editing**, choose a video (up to 100 MB and 3 minutes). Generating a plan extracts three sampled stills locally and sends those images and the video duration to the configured AI. The full video remains in your browser. A five-second sample is available at [`samples/video-editing-sample.mp4`](./samples/video-editing-sample.mp4).
 5. In **Toast / Meta Analysis**, click **Connect to Meta (demo)** to reveal the sample report and charts; all displayed data comes from the included CSV.
 6. Use **Approve draft** to open the completion review for the eight required campaign-building steps. Each step is listed as complete or incomplete, with a shortcut to unfinished work; confirm approval once all required steps are complete. Human review and Toast / Meta Ads Analysis are optional. Find approved snapshots from **Approved drafts** in the sidebar or top bar; use **Edit draft** to reopen a snapshot and **Save changes & approve** to replace its archived version. After approval, **Start new campaign** returns to the brief form while keeping the snapshot in the archive. They remain in this browser only and are not published.
 
@@ -114,7 +117,7 @@ This app covers the required CerealBox challenge areas in a practical, mock envi
 - AI Static Creative
 - AI Script Writing
 - AI UGC Video
-- AI Video Editing (script-to-timeline splitting only; no footage processing)
+- AI Video Editing (video-duration and three-frame AI analysis; original video stays local; no rendered export)
 - AI Media Buyer / Ads Agent
 - AI Idea Generator
 - AI Landing Pages

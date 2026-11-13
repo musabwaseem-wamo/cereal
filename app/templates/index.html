@@ -85,6 +85,7 @@
             <p class="form-note">Your brief guides the campaign ideas, copy, creative prompts and landing page. Use sample information only.</p>
             <button class="button button-coral" type="submit"><span class="button-symbol" aria-hidden="true">✦</span> Generate campaign ideas <span class="button-arrow">↗</span></button>
           </div>
+          <p id="campaign-generation-status" class="campaign-generation-status" role="status" aria-live="polite"></p>
         </form>
       </section>
 
@@ -124,11 +125,11 @@
                 <article class="workflow-tile"><span class="tile-icon gold">04</span><span class="tile-step">4 / STATIC CREATIVE</span><h4>Image prompt builder</h4><p>Build and copy a model-agnostic prompt using the selected concept and image format.</p></article>
                 <article class="workflow-tile"><span class="tile-icon coral">05</span><span class="tile-step">5 / SCRIPT WRITING</span><h4>Timed video script</h4><p>Generate or revise a 15-, 30-, 45- or 60-second scene-by-scene script.</p></article>
                 <article class="workflow-tile"><span class="tile-icon lilac">06</span><span class="tile-step">6 / UGC VIDEO</span><h4>Creator video prompt</h4><p>Build a creator-style video prompt and shot outline; no video is rendered.</p></article>
-                <article class="workflow-tile"><span class="tile-icon mint">07</span><span class="tile-step">7 / VIDEO EDITING</span><h4>Editable cut timeline</h4><p>Split timed script scenes into shorter clips with production notes.</p></article>
+                <article class="workflow-tile"><span class="tile-icon mint">07</span><span class="tile-step">7 / VIDEO EDITING</span><h4>Video-aware edit plan</h4><p>Analyze video duration and three sampled frames, then suggest and preview edit cuts.</p></article>
                 <article class="workflow-tile"><span class="tile-icon gold">08</span><span class="tile-step">8 / MEDIA BUYER AGENT</span><h4>Launch planning assistant</h4><p>Brief-based budget split, testing plan and optimization guardrails; no account actions.</p></article>
                 <article class="workflow-tile"><span class="tile-icon coral">09</span><span class="tile-step">9 / TOAST + META ANALYSIS</span><h4>Sample performance report</h4><p>Explore sample CSV metrics and campaign charts; not a live account connection.</p></article>
               </div>
-              <div class="human-note"><span>◎</span><p><strong>Prototype boundaries:</strong> AI-backed generation uses OpenAI when configured; without a key, labeled local templates are used. Image/UGC prompts are copied to an external model, the editing view creates a script timeline, media buying is planning only, and reporting uses sample data. No media is rendered, no ad account is connected, and nothing is published or changed automatically.</p></div>
+              <div class="human-note"><span>◎</span><p><strong>Prototype boundaries:</strong> AI-backed generation uses OpenAI when configured; without a key, labeled local templates are used. Image/UGC prompts are copied to an external model, video editing sends three sampled stills (not the full video) for an edit plan, media buying is planning only, and reporting uses sample data. The video preview is not rendered/exported. No ad account is connected, and nothing is published or changed automatically.</p></div>
             </section>
 
             <section class="view-panel hidden" data-panel="ideas">
@@ -203,7 +204,7 @@
               </div>
               <p id="video-script-source" class="subtle-label">Choose a total duration and generate a script.</p>
               <div id="script-list" class="script-list"></div>
-              <p class="subtle-label">Your timed script will be available as the source for clip splitting in AI Video Editing.</p>
+              <p class="subtle-label">Your timed script is optional creative context for the video-aware edit plan in AI Video Editing.</p>
             </section>
             <section class="view-panel hidden" data-panel="ugc">
               <div class="section-title-row"><div><div class="eyebrow">AI UGC VIDEO · CREATOR PROMPT</div><h3>Build a creator-style video prompt</h3></div><span class="draft-pill">PROMPT ONLY</span></div>
@@ -225,19 +226,41 @@
               <h4 class="subsection-title">Starter creator concepts</h4><div id="ugc-list" class="stack-list"></div>
             </section>
             <section class="view-panel hidden" data-panel="editing">
-              <div class="section-title-row"><div><div class="eyebrow">AI VIDEO EDITING · SCRIPT-TO-TIMELINE</div><h3>Split the timed script into edit-ready clips</h3></div><span class="draft-pill">NO MEDIA RENDERING</span></div>
-              <p class="panel-intro">This editing assistant works from the generated script, not uploaded footage. Choose a maximum clip length, add runtime edit notes, then build a continuous timeline. Each clip can be split again at its midpoint.</p>
+              <div class="section-title-row"><div><div class="eyebrow">AI VIDEO EDITING · VIDEO-AWARE EDIT PLAN</div><h3>Analyze your footage and plan the edit</h3></div><span class="draft-pill">3 FRAME ANALYSIS · NO EXPORT</span></div>
+              <p class="panel-intro">Upload a source video to analyze its duration and three sampled frames. AI uses those visual samples to suggest a continuous edit plan; a timed script is optional creative context.</p>
+              <div class="edit-source-grid">
+                <div class="edit-source-card">
+                  <div class="eyebrow">SOURCE FOOTAGE · REQUIRED</div>
+                  <label for="edit-video-upload">Choose a video to analyze
+                    <input id="edit-video-upload" type="file" accept="video/*" required aria-required="true">
+                  </label>
+                  <p id="edit-video-source-status" class="subtle-label">Choose a video up to 100 MB and 3 minutes. Its duration and three sampled still frames are sent to the configured AI when you generate a plan; the full video stays in this browser.</p>
+                </div>
+                <div id="edit-video-stage" class="edit-video-stage hidden">
+                  <video id="edit-video-preview" controls playsinline preload="metadata" aria-label="Uploaded source video preview"></video>
+                  <div class="edit-video-overlay" aria-hidden="true">
+                    <span id="edit-preview-brand" class="edit-preview-brand"></span>
+                    <span id="edit-preview-caption" class="edit-preview-caption"></span>
+                  </div>
+                </div>
+              </div>
               <div class="video-controls">
                 <label for="edit-split-interval">Maximum clip length</label>
                 <select id="edit-split-interval"><option value="3">3 seconds</option><option value="4">4 seconds</option><option value="5" selected>5 seconds</option><option value="6">6 seconds</option><option value="8">8 seconds</option><option value="10">10 seconds</option></select>
-                <button class="button button-coral" id="build-edit-timeline" type="button">Build / rebuild timeline <span class="button-arrow">↗</span></button>
+                <button class="button button-coral" id="build-edit-timeline" type="button">Generate edit plan <span class="button-arrow">↗</span></button>
+                <button class="button button-outline" id="preview-edit-timeline" type="button" disabled>Preview full edit</button>
               </div>
-              <label class="field-label" for="editing-instructions">Additional editing instructions
-                <textarea id="editing-instructions" rows="3" maxlength="1000" placeholder="For example: keep pacing energetic, preserve the product close-up, and leave room for captions."></textarea>
+              <label class="field-label" for="editing-instructions">Editing, caption, or brand notes
+                <textarea id="editing-instructions" rows="3" maxlength="1000" placeholder="For example: keep pacing energetic, preserve the product close-up, and keep the brand mark unobtrusive."></textarea>
               </label>
-              <p id="edit-timeline-source" class="subtle-label">Generate a timed script first, then build its edit timeline.</p>
+              <p id="edit-timeline-source" class="subtle-label">Choose a video to enable frame analysis and edit suggestions.</p>
+              <p id="edit-visual-analysis-summary" class="edit-analysis-summary hidden"></p>
+              <section id="edit-suggestions-panel" class="edit-suggestions-panel hidden" aria-labelledby="edit-suggestions-heading">
+                <h4 id="edit-suggestions-heading">Visual edit suggestions</h4>
+                <div id="edit-suggestions-list" class="edit-suggestions-list"></div>
+              </section>
               <div id="edit-timeline" class="edit-timeline"></div>
-              <div class="human-note"><span>◎</span><p>Clip boundaries are a starting point for an editor. The app does not ingest footage, apply transitions, synthesize voice, or export a video file.</p></div>
+              <div class="human-note"><span>◎</span><p>The original video remains in your browser. Generating a plan sends its duration, three sampled still frames, optional timed script and editing notes to the configured AI provider. AI only sees those frames—not the full video, motion or audio—so verify all edit suggestions against the source before use.</p></div>
             </section>
             <section class="view-panel hidden" data-panel="media">
               <div class="section-title-row"><div><div class="eyebrow">AI MEDIA BUYER / ADS AGENT</div><h3>Plan the launch before touching an ad account</h3></div><span class="draft-pill">PLANNING ONLY</span></div>

@@ -22,7 +22,7 @@ The studio has a separate section for each of the nine challenge workflows:
 4. **AI Static Creative:** creates an editable image-model prompt from the brief, selected idea, visual direction and aspect ratio. It does not render images.
 5. **AI Script Writing:** generates continuous timed scenes for a selected 15-, 30-, 45- or 60-second length. A runtime improvement request guides OpenAI regeneration; in local-template mode it is attached as a production note rather than misrepresented as AI revision.
 6. **AI UGC Video:** builds a copyable external video prompt with a creator format, shot outline, claims safeguards and disclosure reminder. It does not generate video.
-7. **AI Video Editing:** creates a continuous timeline by splitting script scenes into shorter clips. Individual clips can be split again at their midpoint. It processes no footage and exports no video.
+7. **AI Video Editing:** requires a source video, reads its duration and samples three frames in the browser. When OpenAI is configured, only the three still frames, their timestamps, duration, optional timed-script context and edit notes are sent for a visual summary, three targeted edit recommendations and a continuous edit plan. The original video stays local; users can preview the cuts and split clips locally, but the prototype does not render or export a modified video. Without AI access, it labels the generic demo timeline and does not claim to analyze the frames.
 8. **AI Media Buyer / Ads Agent:** generates a rule-based campaign launch plan and daily budget split from the brief and planned budget. It is separate from results reporting and cannot control ad accounts.
 9. **Toast / Meta Ads Analysis:** calculates performance metrics and recommendations from the included CSV and visualizes campaign ROAS and conversion share. It does not connect to Meta or Toast.
 
@@ -63,12 +63,12 @@ The app is purposely lightweight and usable without API keys or paid subscriptio
 - `app/main.py` serves the local Flask app and JSON endpoints
 - `app/templates/index.html` defines the campaign studio interface
 - `app/static/` contains the local CSS and browser-side JavaScript
-- `app/modules/llm_service.py` makes separate structured OpenAI requests for campaign ideas, selected-idea copy, duration-specific video scripts and edit timelines; validates the responses; and uses labeled local fallbacks if no key exists
+- `app/modules/llm_service.py` makes separate structured OpenAI requests for campaign ideas, selected-idea copy, duration-specific video scripts and three-frame video edit plans; validates responses; and labels local fallbacks if no key exists
 - `app/modules/generators.py` creates local text examples for the proposed creative and page workflows
 - `app/modules/landing_export.py` creates an escaped, standalone HTML export with embedded CSS
 - `app/modules/image_prompt.py` builds reusable, aspect-ratio-aware prompts for external image models
 - `app/modules/ugc_prompt.py` builds creator-style prompts for external video tools
-- `app/modules/editing.py` splits a timed script into a continuous clip timeline
+- `app/modules/editing.py` supports deterministic script-to-clip timeline splitting
 - `app/modules/media_buyer.py` creates brief-based planning recommendations, separate from reporting
 - `app/modules/analytics.py` calculates mock KPI summaries and recommendations
 - `app/data/mock_ads.csv` provides sample ad performance data
