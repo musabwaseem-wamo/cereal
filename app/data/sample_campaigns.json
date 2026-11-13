@@ -1,0 +1,24 @@
+[
+  {
+    "brand": "BrightNest",
+    "product": "smart meal kits",
+    "audience": "busy professionals",
+    "offer": "30% off your first order",
+    "goal": "increase lead quality and purchases",
+    "channel": "Meta ads",
+    "cta": "Get started",
+    "tone": "confident but friendly",
+    "constraints": "Keep visuals clean and policy-safe"
+  },
+  {
+    "brand": "PeakPulse",
+    "product": "wellness supplements",
+    "audience": "active women 25-45",
+    "offer": "free shipping & a 2-week starter pack",
+    "goal": "drive clicks and conversions",
+    "channel": "Instagram Reels",
+    "cta": "Shop now",
+    "tone": "premium and energetic",
+    "constraints": "Avoid exaggerated claims and medical language"
+  }
+]
